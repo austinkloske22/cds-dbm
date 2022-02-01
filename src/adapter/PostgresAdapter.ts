@@ -35,6 +35,84 @@ const getCredentialsForClient = (credentials) => {
 }
 
 export class PostgresAdapter extends BaseAdapter {
+  /**
+  * @override
+  */
+   async _cloneSchema(tenant:string) {
+    const credentials = this.options.service.credentials
+    const defaultSchema = this.options.migrations.schema!.default
+    const client = new Client(getCredentialsForClient(credentials))
+    await client.connect()
+    const sql = `SELECT clone_schema('` + defaultSchema + `', '` + tenant + `', '0');` as string;
+    const response = await client.query(sql);
+    this.logger.log(`[cds-dbm] - Schema ` + tenant + ` created.`)
+    client.end()
+   }
+  /**
+  * @override
+  */
+   async _getSchemas(): Promise<string[]> {
+
+    const credentials = this.options.service.credentials
+    const defaultSchema = this.options.migrations.schema!.default
+    const client = new Client(getCredentialsForClient(credentials))
+
+    await client.connect()
+    const response = await client.query('SELECT schema_name FROM information_schema.schemata;');
+    client.end()
+
+    const existingSchemas = response.rows as string[];
+    return existingSchemas;
+  }
+
+  /**
+   * @override
+   */
+   async _createDropSchemaFunction() {
+    const credentials = this.options.service.credentials
+    const defaultSchema = this.options.migrations.schema!.default
+    const client = new Client(getCredentialsForClient(credentials))
+
+    await client.connect()
+    await client.query(`SET search_path TO ${defaultSchema};`)
+    try {
+      var sql = fs.readFileSync(path.join(__dirname, './sql/drop_schema.sql')).toString();
+      sql = sql.replace('postgres', credentials.user);
+      await client.query(sql)
+      //this.logger.log(`[cds-dbm] - Drop Schema function created`)
+    } catch (error) {
+      switch (error.code) {
+        default:
+          throw error
+      }
+    }
+    client.end()
+  }
+
+  /**
+   * @override
+   */
+  async _createCloneSchemaFunction() {
+      const credentials = this.options.service.credentials
+      const defaultSchema = this.options.migrations.schema!.default
+      const client = new Client(getCredentialsForClient(credentials))
+      await client.connect()
+      await client.query(`SET search_path TO ${defaultSchema};`)
+
+    try {
+      var sql = fs.readFileSync(path.join(__dirname, './sql/clone_schema.sql')).toString();
+      sql = sql.replace('postgres', credentials.user);
+      await client.query(sql)
+      //this.logger.log(`[cds-dbm] - Clone Schema function created`)
+    } catch (error) {
+      switch (error.code) {
+        default:
+          throw error
+      }
+    }
+    client.end()
+  }
+
   async getViewDefinition(viewName: string): Promise<ViewDefinition> {
     const credentials = this.options.service.credentials
     const schema = this.options.migrations.schema?.default;
@@ -142,9 +220,9 @@ export class PostgresAdapter extends BaseAdapter {
     return liquibaseOptions
   }
 
-  async _synchronizeCloneDatabase() {
+  async _synchronizeCloneDatabase(schema:string) {
     const credentials = this.options.service.credentials
-    const cloneSchema = this.options.migrations.schema!.clone
+    const cloneSchema = schema;
     const temporaryChangelogFile = `${this.options.migrations.deploy.tmpFile}`
 
     const client = new Client(getCredentialsForClient(credentials))

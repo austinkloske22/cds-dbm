@@ -34,6 +34,31 @@ export abstract class BaseAdapter {
   /*
    * Abstract functions
    */
+  
+   /**
+   * Clone default schema
+   *
+   * @abstract
+   */
+    abstract _cloneSchema(existing_schema: string, new_schema:string): Promise<void>
+  /**
+   * Get all Schemas
+   *
+   * @abstract
+   */
+     abstract _getSchemas(): Promise<string[]>
+  /**
+   * Clone Tenent Schema
+   *
+   * @abstract
+   */
+  abstract _createCloneSchemaFunction(): Promise<void>
+  /**
+   * Drop Tenent Schema
+   *
+   * @abstract
+   */
+  abstract _createDropSchemaFunction(): Promise<void>
   /**
    * Fully deploy the cds data model to the reference database.
    * The reference database needs to the cleared first.
@@ -47,7 +72,7 @@ export abstract class BaseAdapter {
    *
    * @abstract
    */
-  abstract _synchronizeCloneDatabase(): Promise<void>
+  abstract _synchronizeCloneDatabase(clone:string): Promise<void>
 
   /**
    * Drop the views from the clone, since updating views is hard.
@@ -175,9 +200,12 @@ export abstract class BaseAdapter {
    *
    */
   async deploy({ autoUndeploy = false, loadMode = null, dryRun = false, createDb = false }) {
+
     this.logger.log(`[cds-dbm] - starting delta database deployment of service ${this.serviceKey}`)
     if (createDb) {
       await this._createDatabase()
+      await this._createDropSchemaFunction()
+      await this._createCloneSchemaFunction()
     }
     await this.initCds()
 
@@ -191,7 +219,7 @@ export abstract class BaseAdapter {
     }
 
     // Setup the clone
-    await this._synchronizeCloneDatabase()
+    await this._synchronizeCloneDatabase(this.options.migrations.schema!.clone)
 
     // Drop the known views from the clone
     await this._dropViewsFromCloneDatabase()
@@ -256,26 +284,31 @@ export abstract class BaseAdapter {
     liquibaseOptions.changeLogFile = temporaryChangelogFile
 
     const updateSQL: any = await liquibase(liquibaseOptions).run(updateCmd)
-    
+    const newSchemas = [];
     if (this.options.migrations.multitenant) {
+      const existingSchemas = await this._getSchemas();
       for (let i = 0; i < this.options.migrations.schema?.tenants.length; i++) {
         try {
-          liquibaseOptions.defaultSchemaName = this.options.migrations.schema?.tenants[i]
-          await liquibase(liquibaseOptions).run(updateCmd)
+          const tenant = this.options.migrations.schema?.tenants[i];
+          const found = existingSchemas.find((schema: any) => schema.schema_name === tenant);
+          liquibaseOptions.defaultSchemaName = tenant
+          if (found) {
+            // Update Tenant Schema
+            await liquibase(liquibaseOptions).run(updateCmd)
+            this.logger.log(`[cds-dbm] - Schema ` + tenant + ` updated.`)
+          } else {
+            newSchemas.push(tenant);
+          }
         } catch (err) {
           console.log(err.message)
         }
       }
+      
+      newSchemas.forEach(async(schema: string) => {
+        await this._synchronizeCloneDatabase(schema);
+        this.logger.log(`[cds-dbm] - Schema ` + schema + ` created.`)
+      });
     }
-
-    /*
-    // Synchronize all Tenant schemas with default after deployment
-    if (this.options.migrations.multitenant) {
-      await this._synchronizeTenantSchemas(this.options.migrations.schema?.tenants)
-      //const message = `[cds-dbm] - tenant schemas synchronized`
-      //this.logger.log(message);
-    };
-    */
 
     if (!dryRun) {
       this.logger.log(`[cds-dbm] - delta successfully deployed to the database`)
@@ -306,7 +339,6 @@ export abstract class BaseAdapter {
 
     this.cdsSQL = cds.compile.to.sql(this.cdsModel) as unknown as string[]
     this.cdsSQL.sort(sortByCasadingViews)
-
   }
 
   /**

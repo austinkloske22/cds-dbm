@@ -11,12 +11,13 @@
     "test:pg:up": "docker-compose -f test/app/docker.postgres.yml up -d",
     "test:pg:down": "docker-compose -f test/app/docker.postgres.yml down",
     "lint": "prettier -c . && eslint '*.{js,ts,tsx}'",
-    "build": "run-s clean:ts build:ts build:copy:assets",
+    "build": "run-s clean:ts build:ts build:copy:assets && npm run copy:sql",
     "clean:ts": "npx rimraf dist",
     "build:ts": "tsc -b",
     "build:copy:assets": "npx ts-node util/copystaticassets.ts",
     "release": "standard-version",
-    "watch:ts": "tsc -w"
+    "watch:ts": "tsc -w",
+    "copy:sql": "copyfiles -u 1 src/adapter/sql/*.sql dist"
   },
   "bin": {
     "cds-dbm": "dist/cli.js"

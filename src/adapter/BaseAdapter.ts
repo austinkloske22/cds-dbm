@@ -34,35 +34,6 @@ export abstract class BaseAdapter {
   /*
    * Abstract functions
    */
-
-  /**
-   * Synchronize Tenant Schemas
-   * 
-   * @abstract
-   */
-   abstract _synchronizeTenantSchemas(tenants:string[]): Promise<void>
-
-  /**
-   * Drop Tenent Schema
-   * 
-   * @abstract
-   */
-  abstract _createDropSchemaFunction(): Promise<void>
-
-  /**
-   * Clone Tenent Schema
-   * 
-   * @abstract
-   */
-  abstract _createCloneSchemaFunction(): Promise<void>
-  
-  /**
-   * Sync Tenent Schema
-   * 
-   * @abstract
-   */
-  abstract _createSyncSchemaFunction(): Promise<void>
-
   /**
    * Fully deploy the cds data model to the reference database.
    * The reference database needs to the cleared first.
@@ -207,9 +178,6 @@ export abstract class BaseAdapter {
     this.logger.log(`[cds-dbm] - starting delta database deployment of service ${this.serviceKey}`)
     if (createDb) {
       await this._createDatabase()
-      await this._createDropSchemaFunction()
-      await this._createCloneSchemaFunction()
-      await this._createSyncSchemaFunction()
     }
     await this.initCds()
 

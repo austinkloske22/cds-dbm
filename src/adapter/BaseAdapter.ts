@@ -303,11 +303,22 @@ export abstract class BaseAdapter {
           console.log(err.message)
         }
       }
-      
-      newSchemas.forEach(async(schema: string) => {
-        await this._synchronizeCloneDatabase(schema);
-        this.logger.log(`[cds-dbm] - Schema ` + schema + ` created.`)
-      });
+
+      //Create Tenant Schemas
+      for (let i = 0; i < newSchemas.length; i++) {
+
+        const temporaryChangelogFile = `${this.options.migrations.deploy.tmpFile}`
+        if (fs.existsSync(temporaryChangelogFile)) {
+          fs.unlinkSync(temporaryChangelogFile)
+        }
+        const dirname = path.dirname(temporaryChangelogFile)
+        if (!fs.existsSync(dirname)) {
+          fs.mkdirSync(dirname)
+        }
+
+        await this._synchronizeCloneDatabase(newSchemas[i]);
+        this.logger.log(`[cds-dbm] - Schema ` + newSchemas[i] + ` created.`)
+      }
     }
 
     if (!dryRun) {

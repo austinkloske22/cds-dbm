@@ -330,8 +330,11 @@ export abstract class BaseAdapter {
     } else {
       this.logger.log(updateSQL.stdout)
     }
-
-    fs.unlinkSync(temporaryChangelogFile)
+    
+    //unlink if not already completed through new tenant schemas
+    if (newSchemas.length === 0) {
+      fs.unlinkSync(temporaryChangelogFile)
+    }
   }
 
   /*
